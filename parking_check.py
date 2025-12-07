@@ -75,7 +75,11 @@ def check_parking_location(car_number):
             print(f"✅ 입력 필드 발견: id=car-number")
         except Exception as e:
             print(f"❌ 입력 필드 검색 오류: {e}")
-            return None
+            return {
+                "car_number": car_number,
+                "status": "error",
+                "error": f"입력 필드를 찾을 수 없습니다: {str(e)}"
+            }
         
         # 차량번호 입력 - 숫자 키패드 클릭 방식
         try:
@@ -92,7 +96,11 @@ def check_parking_location(car_number):
             print(f"✅ 차량번호 입력 완료: {car_number}")
         except Exception as e:
             print(f"❌ 차량번호 입력 실패: {e}")
-            return None
+            return {
+                "car_number": car_number,
+                "status": "error",
+                "error": f"차량번호 입력 실패: {str(e)}"
+            }
         
         # 검색 버튼 찾기 및 클릭
         try:
@@ -105,7 +113,12 @@ def check_parking_location(car_number):
             # 스크린샷 저장
             driver.save_screenshot("/tmp/parking_debug.png")
             print("디버그 스크린샷 저장: /tmp/parking_debug.png")
-            return None
+            return {
+                "car_number": car_number,
+                "status": "error",
+                "error": f"검색 버튼을 찾을 수 없습니다: {str(e)}",
+                "screenshot": "/tmp/parking_debug.png"
+            }
         
         # 결과 로딩 대기
         time.sleep(3)
@@ -166,22 +179,37 @@ def send_to_mattermost(webhook_url, result):
     import requests
     import re
     
-    # 주차 정보 파싱
-    details = result.get('details', '')
+    status = result.get('status', 'unknown')
     
-    # 정규식으로 정보 추출
-    car_number_match = re.search(r'차량번호\s*(\d+)', details)
-    entry_time_match = re.search(r'입차시간\s*([\d\-:\s]+)', details)
-    parking_floor_match = re.search(r'주차층\s*([^\n]+)', details)
-    parking_location_match = re.search(r'차량위치\s*([^\n]+)', details)
-    
-    car_number = car_number_match.group(1) if car_number_match else result.get('car_number', 'N/A')
-    entry_time = entry_time_match.group(1).strip() if entry_time_match else 'N/A'
-    parking_floor = parking_floor_match.group(1).strip() if parking_floor_match else 'N/A'
-    parking_location = parking_location_match.group(1).strip() if parking_location_match else 'N/A'
-    
-    # Mattermost 메시지 포맷팅
-    message = f"""### 🚗 주차 위치 알림
+    # 오류 발생 시 오류 메시지 포맷
+    if status == 'error':
+        error_msg = result.get('error', '알 수 없는 오류')
+        car_number = result.get('car_number', 'N/A')
+        message = f"""### ❌ 주차 위치 조회 실패
+
+**차량번호:** {car_number}
+**오류 내용:** {error_msg}
+
+---
+_자동 알림 - {time.strftime('%Y-%m-%d %H:%M:%S')}_
+"""
+    else:
+        # 주차 정보 파싱
+        details = result.get('details', '')
+        
+        # 정규식으로 정보 추출
+        car_number_match = re.search(r'차량번호\s*(\d+)', details)
+        entry_time_match = re.search(r'입차시간\s*([\d\-:\s]+)', details)
+        parking_floor_match = re.search(r'주차층\s*([^\n]+)', details)
+        parking_location_match = re.search(r'차량위치\s*([^\n]+)', details)
+        
+        car_number = car_number_match.group(1) if car_number_match else result.get('car_number', 'N/A')
+        entry_time = entry_time_match.group(1).strip() if entry_time_match else 'N/A'
+        parking_floor = parking_floor_match.group(1).strip() if parking_floor_match else 'N/A'
+        parking_location = parking_location_match.group(1).strip() if parking_location_match else 'N/A'
+        
+        # Mattermost 메시지 포맷팅
+        message = f"""### 🚗 주차 위치 알림
 
 **차량번호:** {car_number}
 **입차시간:** {entry_time}
@@ -223,19 +251,29 @@ def main():
     # 주차 위치 조회
     result = check_parking_location(car_number)
     
+    # Mattermost Webhook URL 가져오기
+    webhook_url = os.getenv("MATTERMOST_WEBHOOK_URL")
+    
     if result and result.get('status') == 'found':
         print("\n" + "="*50)
         print("✅ 주차 위치 조회 완료")
         print("="*50)
         
         # Mattermost 전송
-        webhook_url = os.getenv("MATTERMOST_WEBHOOK_URL")
         if webhook_url:
             send_to_mattermost(webhook_url, result)
         else:
             print("⚠️  MATTERMOST_WEBHOOK_URL이 설정되지 않아 알림을 전송하지 않습니다.")
     else:
         print("\n❌ 주차 위치 조회 실패")
+        
+        # 오류 발생 시에도 Mattermost 알림 전송
+        if webhook_url and result:
+            print("📤 오류 내용을 Mattermost로 전송합니다...")
+            send_to_mattermost(webhook_url, result)
+        elif not webhook_url:
+            print("⚠️  MATTERMOST_WEBHOOK_URL이 설정되지 않아 오류 알림을 전송하지 않습니다.")
+        
         sys.exit(1)
 
 
