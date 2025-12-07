@@ -1,0 +1,22 @@
+# 환경변수 파일 (실제 값 포함)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 가상환경
+venv/
+env/
+ENV/
+
+# 스크린샷
+*.png
+/tmp/
+
+# IDE
+.vscode/
+.idea/

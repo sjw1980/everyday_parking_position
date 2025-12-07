@@ -1,0 +1,40 @@
+name: 주차 위치 자동 조회
+
+on:
+  schedule:
+    # 매일 오전 7시 (한국시간 기준, UTC+9 = 22:00 UTC)
+    - cron: "0 22 * * *"
+  workflow_dispatch: # 수동 실행 가능
+
+jobs:
+  check-parking:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: 의존성 설치
+        run: |
+          pip install -r requirements.txt
+
+      - name: Chrome 설치
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: ChromeDriver 설치
+        uses: nanasess/setup-chromedriver@v2
+
+      - name: 주차 위치 조회
+        env:
+          CAR_NUMBER: ${{ secrets.CAR_NUMBER }}
+          PARKING_URL: ${{ secrets.PARKING_URL }}
+          MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
+        run: |
+          python parking_check.py
