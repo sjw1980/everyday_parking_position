@@ -7,6 +7,7 @@
 import os
 import sys
 import time
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 from selenium import webdriver
@@ -181,6 +182,11 @@ def send_to_mattermost(webhook_url, result):
     
     status = result.get('status', 'unknown')
     
+    # 한국 시간 (UTC+9)
+    kst = timezone(timedelta(hours=9))
+    now_kst = datetime.now(kst)
+    timestamp = now_kst.strftime('%Y-%m-%d %H:%M:%S KST')
+    
     # 오류 발생 시 오류 메시지 포맷
     if status == 'error':
         error_msg = result.get('error', '알 수 없는 오류')
@@ -191,7 +197,7 @@ def send_to_mattermost(webhook_url, result):
 **오류 내용:** {error_msg}
 
 ---
-_자동 알림 - {time.strftime('%Y-%m-%d %H:%M:%S')}_
+_자동 알림 - {timestamp}_
 """
     else:
         # 주차 정보 파싱
@@ -217,7 +223,7 @@ _자동 알림 - {time.strftime('%Y-%m-%d %H:%M:%S')}_
 **차량위치:** {parking_location}
 
 ---
-_자동 알림 - {time.strftime('%Y-%m-%d %H:%M:%S')}_
+_자동 알림 - {timestamp}_
 """
     
     payload = {
