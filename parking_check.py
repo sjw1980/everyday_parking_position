@@ -17,6 +17,15 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
+# Redis 모듈 import (선택적)
+try:
+    from parking_data import ParkingDataManager
+    REDIS_AVAILABLE = True
+except ImportError:
+    print("⚠️  Redis 모듈을 불러올 수 없습니다. Redis 기능을 사용하려면 redis 패키지를 설치하세요.")
+    REDIS_AVAILABLE = False
+    ParkingDataManager = None
+
 # .env 파일 로드 (로컬 테스트용, GitHub Actions에서는 환경변수 사용)
 env_path = Path(__file__).parent / '.env'
 if env_path.exists():
@@ -254,22 +263,55 @@ def main():
         print("환경변수 CAR_NUMBER를 설정해주세요.")
         sys.exit(1)
     
+    # Redis 매니저 초기화 (선택적)
+    redis_manager = None
+    if REDIS_AVAILABLE:
+        try:
+            redis_manager = ParkingDataManager()
+            print("✅ Redis 연결 준비 완료")
+        except Exception as e:
+            print(f"⚠️  Redis 연결 실패: {str(e)}")
+            print("Redis 없이 주차 조회만 진행합니다.")
+    
     # 주차 위치 조회
     result = check_parking_location(car_number)
     
     # Mattermost Webhook URL 가져오기
     webhook_url = os.getenv("MATTERMOST_WEBHOOK_URL")
     
+    # Redis에 데이터 저장 (선택적)
+    redis_changed = False
+    redis_message = ""
+    if redis_manager and result:
+        try:
+            redis_changed, redis_message = redis_manager.save_parking_info(result)
+            if redis_changed:
+                print(f"📊 Redis 저장: {redis_message}")
+            else:
+                print("📊 Redis: 변경사항 없음")
+        except Exception as e:
+            print(f"⚠️  Redis 저장 중 오류: {str(e)}")
+    
     if result and result.get('status') == 'found':
         print("\n" + "="*50)
         print("✅ 주차 위치 조회 완료")
         print("="*50)
         
-        # Mattermost 전송
-        if webhook_url:
-            send_to_mattermost(webhook_url, result)
-        else:
-            print("⚠️  MATTERMOST_WEBHOOK_URL이 설정되지 않아 알림을 전송하지 않습니다.")
+        # Redis 변경사항이 있거나 처음 실행시 알림 전송
+        should_notify = True
+        if redis_manager:
+            # Redis에 저장된 데이터가 있고 변경사항이 없으면 알림 생략 가능
+            existing_data = redis_manager.get_parking_info(car_number)
+            if existing_data and not redis_changed:
+                should_notify = False
+                print("🔕 Redis에 동일한 데이터가 있어 알림을 생략합니다.")
+        
+        if should_notify:
+            # Mattermost 전송
+            if webhook_url:
+                send_to_mattermost(webhook_url, result)
+            else:
+                print("⚠️  MATTERMOST_WEBHOOK_URL이 설정되지 않아 알림을 전송하지 않습니다.")
     else:
         print("\n❌ 주차 위치 조회 실패")
         
