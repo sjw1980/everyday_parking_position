@@ -2,8 +2,8 @@ name: 주차 위치 자동 조회
 
 on:
   schedule:
-    # 매일 오전 7시 (한국시간 기준, UTC+9 = 22:00 UTC)
-    - cron: "0 22 * * *"
+    # 5분마다 실행 (GitHub Actions의 최소 간격)
+    - cron: "*/5 * * * *"
   workflow_dispatch: # 수동 실행 가능
 
 jobs:
