@@ -36,5 +36,7 @@ jobs:
           CAR_NUMBER: ${{ secrets.CAR_NUMBER }}
           PARKING_URL: ${{ secrets.PARKING_URL }}
           MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
+          UPSTASH_REDIS_URL: ${{ secrets.UPSTASH_REDIS_URL }}
+          UPSTASH_REDIS_TOKEN: ${{ secrets.UPSTASH_REDIS_TOKEN }}
         run: |
           python parking_check.py
