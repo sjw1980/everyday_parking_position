@@ -2,3 +2,4 @@ selenium
 python-dotenv
 requests
 redis
+webdriver-manager

@@ -36,15 +36,30 @@ if env_path.exists():
 def setup_driver():
     """Selenium 웹드라이버 설정 (헤드리스 모드)"""
     chrome_options = Options()
-    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--headless=new')  # 새로운 헤드리스 모드
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.add_argument('--remote-debugging-port=9222')
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     
-    driver = webdriver.Chrome(options=chrome_options)
-    return driver
+    # User-Agent 설정
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    
+    try:
+        from selenium.webdriver.chrome.service import Service
+        from webdriver_manager.chrome import ChromeDriverManager
+        
+        # ChromeDriver 자동 관리
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        print("✅ ChromeDriver 자동 설치 및 실행 완료")
+        return driver
+    except ImportError:
+        # webdriver_manager가 없으면 기본 방식
+        print("⚠️  webdriver_manager 없음 - 기본 ChromeDriver 사용")
+        driver = webdriver.Chrome(options=chrome_options)
+        return driver
 
 
 def check_parking_location(car_number):
