@@ -127,7 +127,10 @@ class ParkingDataManager:
             'last_updated': current_time.isoformat(),
             'details': result.get('details', ''),
             'error': result.get('error', ''),
-            'screenshot': result.get('screenshot', '')
+            'screenshot': result.get('screenshot', ''),
+            'parking_floor': result.get('parking_floor', 'N/A'),
+            'parking_location': result.get('parking_location', 'N/A'),
+            'entry_time': result.get('entry_time', 'N/A')
         }
 
         # JSON으로 변환
@@ -140,15 +143,14 @@ class ParkingDataManager:
         if existing_data:
             existing_data_dict = json.loads(existing_data.decode('utf-8'))
 
-            # 주요 필드 비교 (상태, 상세정보, 오류)
-            key_fields = ['status', 'details', 'error']
+            # 주요 필드 비교 (상태, 주차층, 차량위치)
+            key_fields = ['status', 'parking_floor', 'parking_location']
             for field in key_fields:
                 if existing_data_dict.get(field) != new_data.get(field):
                     is_changed = True
                     old_value = existing_data_dict.get(field, 'N/A')
                     new_value = new_data.get(field, 'N/A')
                     change_message += f"{field}: '{old_value}' → '{new_value}'\n"
-                    break  # 첫 번째 변경사항만 기록
         else:
             is_changed = True
             change_message = "신규 주차 정보 저장"

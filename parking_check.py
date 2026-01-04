@@ -155,19 +155,35 @@ def check_parking_location(car_number):
         
         # 주차 위치 정보 추출 (페이지 구조에 따라 조정 필요)
         try:
+            import re
+            
             # 페이지 전체 텍스트 가져오기
             body_text = driver.find_element(By.TAG_NAME, "body").text
+            
+            # 정규식으로 주차층과 차량위치 추출
+            parking_floor_match = re.search(r'주차층\s*([^\n]+)', body_text)
+            parking_location_match = re.search(r'차량위치\s*([^\n]+)', body_text)
+            entry_time_match = re.search(r'입차시간\s*([\d\-:\s]+)', body_text)
+            
+            parking_floor = parking_floor_match.group(1).strip() if parking_floor_match else 'N/A'
+            parking_location = parking_location_match.group(1).strip() if parking_location_match else 'N/A'
+            entry_time = entry_time_match.group(1).strip() if entry_time_match else 'N/A'
             
             result = {
                 "car_number": car_number,
                 "status": "found",
                 "screenshot": screenshot_path,
-                "details": body_text[:500]  # 처음 500자만
+                "details": body_text[:500],  # 처음 500자만
+                "parking_floor": parking_floor,
+                "parking_location": parking_location,
+                "entry_time": entry_time
             }
             
             print(f"\n📍 주차 위치 조회 결과:")
             print(f"차량번호: {car_number}")
-            print(f"상세정보:\n{body_text[:300]}...")
+            print(f"주차층: {parking_floor}")
+            print(f"차량위치: {parking_location}")
+            print(f"입차시간: {entry_time}")
             
             return result
             
@@ -227,16 +243,11 @@ _자동 알림 - {timestamp}_
         # 주차 정보 파싱
         details = result.get('details', '')
         
-        # 정규식으로 정보 추출
-        car_number_match = re.search(r'차량번호\s*(\d+)', details)
-        entry_time_match = re.search(r'입차시간\s*([\d\-:\s]+)', details)
-        parking_floor_match = re.search(r'주차층\s*([^\n]+)', details)
-        parking_location_match = re.search(r'차량위치\s*([^\n]+)', details)
-        
-        car_number = car_number_match.group(1) if car_number_match else result.get('car_number', 'N/A')
-        entry_time = entry_time_match.group(1).strip() if entry_time_match else 'N/A'
-        parking_floor = parking_floor_match.group(1).strip() if parking_floor_match else 'N/A'
-        parking_location = parking_location_match.group(1).strip() if parking_location_match else 'N/A'
+        # result에서 직접 파싱된 정보 가져오기
+        car_number = result.get('car_number', 'N/A')
+        entry_time = result.get('entry_time', 'N/A')
+        parking_floor = result.get('parking_floor', 'N/A')
+        parking_location = result.get('parking_location', 'N/A')
         
         # Mattermost 메시지 포맷팅
         message = f"""### 🚗 주차 위치 알림
@@ -294,16 +305,53 @@ def main():
     # Mattermost Webhook URL 가져오기
     webhook_url = os.getenv("MATTERMOST_WEBHOOK_URL")
     
-    # Redis에 데이터 저장 (선택적)
+    # 주차 정보 변경 여부 확인
+    parking_changed = False
+    
+    if result and result.get('status') == 'found':
+        # Redis에 저장된 정보와 비교
+        if redis_manager:
+            try:
+                existing_data = redis_manager.get_parking_info(car_number)
+                
+                if existing_data and existing_data.get('status') == 'found':
+                    # 주차층과 차량위치 비교
+                    old_floor = existing_data.get('parking_floor', 'N/A')
+                    old_location = existing_data.get('parking_location', 'N/A')
+                    new_floor = result.get('parking_floor', 'N/A')
+                    new_location = result.get('parking_location', 'N/A')
+                    
+                    if old_floor != new_floor or old_location != new_location:
+                        parking_changed = True
+                        print(f"🔄 주차 위치 변경 감지:")
+                        print(f"   주차층: {old_floor} → {new_floor}")
+                        print(f"   차량위치: {old_location} → {new_location}")
+                    else:
+                        print(f"✅ 주차 위치 동일: {old_floor} / {old_location}")
+                        print("🔕 변경사항이 없어 저장 및 알림을 생략합니다.")
+                else:
+                    # 기존 데이터가 없거나 이전에 오류였던 경우
+                    parking_changed = True
+                    print("✅ 신규 주차 정보 또는 상태 변경")
+            except Exception as e:
+                print(f"⚠️  Redis 조회 중 오류: {str(e)}")
+                # 오류 발생시 안전하게 저장
+                parking_changed = True
+        else:
+            # Redis가 없으면 항상 저장
+            parking_changed = True
+    elif result and result.get('status') == 'error':
+        # 오류 발생 시 항상 알림
+        parking_changed = True
+    
+    # Redis에 데이터 저장 (변경사항이 있을 때만)
     redis_changed = False
     redis_message = ""
-    if redis_manager and result:
+    if redis_manager and result and parking_changed:
         try:
             redis_changed, redis_message = redis_manager.save_parking_info(result)
             if redis_changed:
                 print(f"📊 Redis 저장: {redis_message}")
-            else:
-                print("📊 Redis: 변경사항 없음")
         except Exception as e:
             print(f"⚠️  Redis 저장 중 오류: {str(e)}")
     
@@ -312,16 +360,8 @@ def main():
         print("✅ 주차 위치 조회 완료")
         print("="*50)
         
-        # Redis 변경사항이 있거나 처음 실행시 알림 전송
-        should_notify = True
-        if redis_manager:
-            # Redis에 저장된 데이터가 있고 변경사항이 없으면 알림 생략 가능
-            existing_data = redis_manager.get_parking_info(car_number)
-            if existing_data and not redis_changed:
-                should_notify = False
-                print("🔕 Redis에 동일한 데이터가 있어 알림을 생략합니다.")
-        
-        if should_notify:
+        # 변경사항이 있을 때만 알림 전송
+        if parking_changed:
             # Mattermost 전송
             if webhook_url:
                 send_to_mattermost(webhook_url, result)
