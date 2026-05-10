@@ -161,3 +161,5 @@ python parking_check.py
 - `.env.example`: 환경변수 템플릿
 - `requirements.txt`: Python 의존성
 - `.github/workflows/parking-check.yml`: GitHub Actions 워크플로우
+
+  
