@@ -1,0 +1,32 @@
+name: Auto Commit
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # 매주 일요일 자정에 실행
+  workflow_dispatch: # 수동 실행도 가능하도록 추가
+
+jobs:
+  auto-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Create a change
+        run: |
+          echo "Last updated on $(date)" > last-update.log
+
+      - name: Commit and push changes
+        run: |
+          git add last-update.log
+          # 변경 사항이 있을 때만 커밋하도록 수정
+          git diff --staged --quiet || git commit -m "Auto-commit to keep workflow active"
+          git push
+
